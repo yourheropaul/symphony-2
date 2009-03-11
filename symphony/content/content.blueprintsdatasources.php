@@ -88,6 +88,7 @@
 				$fields['group'] = $existing->dsParamGROUP;
 				$fields['html_encode'] = $existing->dsParamHTMLENCODE;
 				if($existing->dsParamREDIRECTONEMPTY == 'yes') $fields['redirect_on_empty'] = 'yes';
+				$fields['cache'] = $existing->dsParamCACHE;
 				
 				$existing->dsParamFILTERS = @array_map('stripslashes', $existing->dsParamFILTERS);
 				
@@ -482,6 +483,12 @@
 			$p->setAttribute('class', 'help');
 			$li->appendChild($p);
 			
+			$label = Widget::Label();
+			$input = Widget::Input('fields[cache]', $fields['cache'], NULL, array('size' => '6'));
+			$label->setValue('Update cached result every ' . $input->generate(false) . ' minutes');
+			if(isset($this->_errors['cache'])) $li->appendChild(Widget::wrapFormElementWithError($label, $this->_errors['cache']));
+			else $li->appendChild($label);
+			
 			$ul->appendChild($li);
 
 			$li = new XMLElement('li');
@@ -819,6 +826,8 @@
 					elseif(!self::__isValidPageString($fields['page_number'])){
 						$this->_errors['page_number'] = __('Must be a valid number or parameter');
 					}
+					
+					if(strlen(trim($fields['cache'])) > 0 && !is_numeric($fields['cache'])) $this->_errors['cache'] = __('Must be a valid number');
 				}
 				
 			}
@@ -947,6 +956,7 @@
 						$params['sort'] = $fields['sort'];
 						$params['startpage'] = $fields['page_number'];
 						$params['htmlencode'] = $fields['html_encode'];
+						$params['cache'] = $fields['cache'];
 						
 						$dsShell = str_replace('<!-- GRAB -->', "include(TOOLKIT . '/data-sources/datasource.section.php');", $dsShell);
 						
