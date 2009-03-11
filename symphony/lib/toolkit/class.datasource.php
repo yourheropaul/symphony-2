@@ -12,6 +12,9 @@
 		var $_dependencies;
 		var $_force_empty_result;
 		
+		// buffer for ourput params during caching
+		public static $_sOutputParams = null;
+		
 		const CRLF = "\r\n";
 		
 		function __construct(&$parent, $env=NULL, $process_params=true){
@@ -172,8 +175,126 @@
 		function about(){		
 		}
 
-		function grab($param=array()){
+		function grab(&$param=array()){
 		}
-	
+		
+		/*
+		** Handle caching
+		*/
+		
+		// Get an instance- and param-specific file name.
+		// Returns true if the file exists and isn't stale, false otherwise
+		
+		protected function getCacheFileName(&$filename, &$file_age)
+		{
+			// Set up the path
+			$filename = null;						
+				
+			// Include the variable names for maximum uniquity
+			foreach (get_class_vars(get_class($this)) as $key => $value)
+			{
+				// Filter needs to have their values set by the _env
+				if ($key == 'dsParamFILTERS')
+				{
+					$filename .= $key;
+					
+					foreach ($value as $field => $filter)
+					{
+						$matches = array();
+						
+						// Filters come in the format {$filter-name}
+						if (preg_match('/\{\$([^}]+)\}/', $filter, $matches))	
+						{
+							// Value could either be in the pool or the URL
+							$param = self::__findParameterInEnv($matches[1], $this->_env);														
+							
+							// Always implode arrays
+							$filename .= $field . (is_array($param) ? implode($param) : $param);
+						} 								
+						else
+							$filename .= $field . (is_array($filter) ? implode($filter) : $filter);;												
+					}
+					
+					continue;
+				}
+				
+				$filename .= $key . (is_array($value) ? implode($value) : $value);
+			}
+						
+			//$filename = MANIFEST ."/cache/". get_class($this) . "-" . md5($filename) . ".xml";
+			
+			$filename = sprintf( "%s/cache/%s-%s.xml",
+										MANIFEST,
+										get_class($this),
+										md5($filename));														
+			
+			if (!file_exists($filename)) 
+				return false;
+					
+			// Check the file age
+			// MUL is fast than FLOOR() and DIV
+			
+			$file_age = (int)(floor(time() - filemtime($filename)));				
+			
+			return ( $file_age < ($this->dsParamCACHE * 60));			
+		}
+		
+		public function fetch(&$param=array())
+		{					
+			if (isset($this->dsParamCACHE) && is_numeric($this->dsParamCACHE) && $this->dsParamCACHE > 0)
+			{
+				$filename = null;
+				$file_age = 0;
+				
+				if ($this->getCacheFileName($filename, $file_age))
+				{	
+					self::$_sOutputParams = array();
+					
+					$xml = preg_replace_callback(
+										'/@([a-z-]+):(.+)?/',
+										create_function(
+											'$matches',
+											'DataSource::$_sOutputParams[$matches[1]] = explode(",",$matches[2]);'
+										),
+										file_get_contents($filename)
+						   );
+						   
+					foreach (self::$_sOutputParams as $key => $value)
+						$param[$key] = $value;											
+																										
+					return preg_replace('/cache-age="fresh"/', 'cache-age="'.$file_age.'s"', $xml);			
+				}
+				else
+				{					
+					// Backup the param pool, and see what's been added
+					$tmp = array();
+													
+					// Fetch the contents
+					$contents = $this->grab($tmp);
+					
+					// Handle output params
+					$opp = null;										
+										
+					foreach ($tmp as $name => $value)
+					{
+						// Concat the result
+						$opp .= sprintf("@%s:%s\n", $name, implode(',', $value));
+						
+						// Push into the params array
+						$param[$name] = $value;
+					}																				
+					
+					// Add an attribute to preg_replace later
+					$contents->setAttribute("cache-age", "fresh");									
+					
+					file_put_contents($filename, $opp . $contents->generate(true, 1));
+					
+					return $contents;
+				}																														
+			}
+				
+			
+			return $this->grab($param);
+		}			
 	}
 	

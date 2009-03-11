@@ -448,7 +448,7 @@
 				$ds = $pool[$handle];
 				$ds->processParameters(array('env' => $this->_env, 'param' => $this->_param));
 				
-				if($xml = $ds->grab($this->_env['pool'])):
+				if($xml = $ds->fetch($this->_env['pool'])):
 					if(is_object($xml)) $wrapper->appendChild($xml);
 					else $wrapper->setValue($wrapper->getValue() . self::CRLF . '	' . trim($xml));
 					
@@ -463,22 +463,6 @@
 		
 		private function __processEvents($events, &$wrapper){
 			
-			####
-			# Delegate: FrontendProcessEvents
-			# Description: Manipulate the events array and event element wrapper
-			# Global: Yes
-			$this->ExtensionManager->notifyMembers(
-				'FrontendProcessEvents', 
-				'/frontend/', 
-				array(
-					'env' => $this->_env, 
-					'events' => &$events, 
-					'wrapper' => &$wrapper, 
-					'page_data' => $this->_pageData
-				)
-			);
-			#####
-
 			if(strlen(trim($events)) > 0){			
 				$events = preg_split('/,\s*/i', $events, -1, PREG_SPLIT_NO_EMPTY);
 				$events = array_map('trim', $events);
