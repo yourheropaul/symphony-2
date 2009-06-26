@@ -19,7 +19,7 @@
 		}
 		
 		public function buildSortingSQL(&$joins, &$where, &$sort, $order='ASC'){
-		    $joins .= "INNER JOIN `tbl_entries_data_".$this->get('id')."` AS `ed` ON (`e`.`id` = `ed`.`entry_id`) ";
+		    $joins .= "LEFT OUTER JOIN `tbl_entries_data_".$this->get('id')."` AS `ed` ON (`e`.`id` = `ed`.`entry_id`) ";
 		    $sort = 'ORDER BY ' . (in_array(strtolower($order), array('random', 'rand')) ? 'RAND()' : "`ed`.`file` $order");
 		}
 		
@@ -185,12 +185,17 @@
 			$wrapper->appendChild($item);
 		}
 		
-		function displaySettingsPanel(&$wrapper, $errors=NULL){
-			
+		public function displaySettingsPanel(&$wrapper, $errors = null) {
 			parent::displaySettingsPanel($wrapper, $errors);
 
 			## Destination Folder
-			$ignore = array('events', 'data-sources', 'text-formatters', 'pages', 'utilities');
+			$ignore = array(
+				'/workspace/events',
+				'/workspace/data-sources',
+				'/workspace/text-formatters',
+				'/workspace/pages',
+				'/workspace/utilities'
+			);
 			$directories = General::listDirStructure(WORKSPACE, true, 'asc', DOCROOT, $ignore);	   	
 	
 			$label = Widget::Label(__('Destination Directory'));
@@ -217,7 +222,7 @@
 		}
 		
 		function checkPostFieldData($data, &$message, $entry_id=NULL){
-			
+		
 			/*
 				UPLOAD_ERR_OK
 				Value: 0; There is no error, the file uploaded with success.
@@ -333,12 +338,12 @@
 				$message = __('A file with the name %1$s already exists in %2$s. Please rename the file first, or choose another.', array($data['name'], $this->get('destination')));
 				return self::__INVALID_FIELDS__;				
 			}
-			
+
 			return self::__OK__;		
 						
 		}
 		
-		function processRawFieldData($data, &$status, $simulate=false, $entry_id=NULL){
+		public function processRawFieldData($data, &$status, $simulate=false, $entry_id=NULL){
 
 			$status = self::__OK__;
 			
@@ -371,7 +376,7 @@
 
 			if(!General::uploadFile($abs_path, $data['name'], $data['tmp_name'], $this->_engine->Configuration->get('write_mode', 'file'))){
 				
-				$message = __('There was an error while trying to upload the file <code>%1$s</code> to the target directory <code>%2$s</code>.', array($data['name'], 'workspace/'.$rel_path));
+				$message = __('There was an error while trying to upload the file <code>%1$s</code> to the target directory <code>%2$s</code>.', array($data['name'], 'workspace/'.ltrim($rel_path, '/')));
 				$status = self::__ERROR_CUSTOM__;
 				return;
 			}
@@ -386,7 +391,12 @@
 			$status = self::__OK__;
 			
 			$file = rtrim($rel_path, '/') . '/' . trim($data['name'], '/');
-			
+
+			## If browser doesn't send MIME type (e.g. .flv in Safari)
+			if (strlen(trim($data['type'])) == 0){
+				$data['type'] = 'unknown';
+			}
+
 			return array(
 				'file' => $file,
 				'size' => $data['size'],
@@ -442,7 +452,7 @@
 				  `entry_id` int(11) unsigned NOT NULL,
 				  `file` varchar(255) default NULL,
 				  `size` int(11) unsigned NOT NULL,
-				  `mimetype` varchar(50) NOT NULL,
+				  `mimetype` varchar(50) default NULL,
 				  `meta` varchar(255) default NULL,
 				  PRIMARY KEY  (`id`),
 				  KEY `entry_id` (`entry_id`),

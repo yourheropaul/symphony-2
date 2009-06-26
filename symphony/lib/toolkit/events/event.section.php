@@ -20,23 +20,27 @@
 				$post_values = new XMLElement('post-values');
 				foreach($fields as $element_name => $value){
 					if(strlen($value) == 0) continue;
+					if(is_array($value)) {
+						foreach($value as $key => $value) {
+							$post_values->appendChild(new XMLElement($element_name, General::sanitize($value)));
+						}
+						continue;
+					}
 					$post_values->appendChild(new XMLElement($element_name, General::sanitize($value)));
 				}
 			}
-			
+
 			## Combine FILES and POST arrays, indexed by their custom field handles
 			if(isset($_FILES['fields'])){
 				$filedata = General::processFilePostData($_FILES['fields']);
 
 				foreach($filedata as $handle => $data){
 					if(!isset($fields[$handle])) $fields[$handle] = $data;
-					elseif(isset($data['error']) && $data['error'] == 4) $fields['handle'] = NULL;
+					elseif(isset($data['error']) && $data['error'] == 4) $fields[$handle] = NULL;
 					else{
-
 						foreach($data as $ii => $d){
 							if(isset($d['error']) && $d['error'] == 4) $fields[$handle][$ii] = NULL;
 							elseif(is_array($d) && !empty($d)){
-
 								foreach($d as $key => $val)
 									$fields[$handle][$ii][$key] = $val;
 							}						
@@ -58,7 +62,8 @@
 					list($type, $status, $message) = $fr;
 
 					$result->appendChild(buildFilterElement($type, ($status ? 'passed' : 'failed'), $message));
-
+					$result->appendChild($post_values);
+					
 					if(!$status){
 						$result->setAttribute('result', 'error');
 						$result->appendChild(new XMLElement('message', __('Entry encountered errors when saving.')));
@@ -107,7 +112,7 @@
 
 				foreach($errors as $field_id => $message){
 					$field = $entryManager->fieldManager->fetch($field_id);
-					$result->appendChild(new XMLElement($field->get('element_name'), NULL, array('type' => ($fields[$field->get('element_name')] == '' ? 'missing' : 'invalid'))));
+					$result->appendChild(new XMLElement($field->get('element_name'), NULL, array('type' => ($fields[$field->get('element_name')] == '' ? 'missing' : 'invalid'), 'message' => General::sanitize($message))));
 				}
 
 				if(isset($post_values) && is_object($post_values)) $result->appendChild($post_values);		
@@ -117,6 +122,10 @@
 			elseif(__ENTRY_OK__ != $entry->setDataFromPost($fields, $errors, false, ($entry->get('id') ? true : false))):
 				$result->setAttribute('result', 'error');
 				$result->appendChild(new XMLElement('message', __('Entry encountered errors when saving.')));
+				
+				if(isset($errors['field_id'])){
+					$errors = array($errors);
+				}
 
 				foreach($errors as $err){
 					$field = $entryManager->fieldManager->fetch($err['field_id']);
@@ -282,13 +291,37 @@
 	$entry_id = $position = $fields = NULL;	
 	
 	if(in_array('expect-multiple', $this->eParamFILTERS)){
-		
 		if(is_array($_POST['fields']) && isset($_POST['fields'][0])){
+
+			$filedata = NULL;
+			if(isset($_FILES['fields'])){
+				$filedata = General::processFilePostData($_FILES['fields']);
+				unset($_FILES['fields']);
+			}
+			
 			foreach($_POST['fields'] as $position => $fields){
-				
 				if(isset($_POST['id'][$position]) && is_numeric($_POST['id'][$position])) $entry_id = $_POST['id'][$position];
 
 				$entry = new XMLElement('entry', NULL, array('position' => $position));
+			
+				if(!is_null($filedata[$position])){
+					foreach($filedata[$position] as $handle => $data){
+
+						if(!isset($fields[$handle])) $fields[$handle] = NULL;
+						
+						if($data[3] == 0){
+							$fields[$handle] = array_combine(
+								array(
+								    'name',
+								    'type',
+								    'tmp_name',
+								    'error',
+								    'size',
+								), $data
+							);
+						}
+					}			
+				}
 				
 				$ret = __doit(self::getSource(), $fields, $entry, $this->_Parent, $this, $this->eParamFILTERS, $position, $entry_id);
 				
